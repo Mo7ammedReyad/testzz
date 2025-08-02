@@ -2,7 +2,9 @@ name = "chatbot-anon"
 compatibility_date = "2025-08-01"
 main = "index.ts"
 
+
 [[d1_databases]]
 binding = "DB"
 database_name = "test"
 database_id = "b3ad23cf-64b2-488b-9371-0cd4bd398156"
+
