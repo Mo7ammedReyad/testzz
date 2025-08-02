@@ -5,6 +5,6 @@ main = "index.ts"
 
 [[d1_databases]]
 binding = "DB"
-database_name = "test"
-database_id = "b3ad23cf-64b2-488b-9371-0cd4bd398156"
+database_name = "db"
+database_id = "21b7a780-1b54-4674-a08e-e7b0c9353ad0"
 
