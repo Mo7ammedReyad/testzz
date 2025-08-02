@@ -1,5 +1,6 @@
 name = "chatbot-anon"
 compatibility_date = "2025-08-01"
+main = "index.ts"
 
 [[d1_databases]]
 binding = "DB"
