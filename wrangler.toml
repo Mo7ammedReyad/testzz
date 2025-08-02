@@ -1,0 +1,15 @@
+name = "hono-auth-worker"
+main = "index.ts"
+compatibility_date = "2023-12-01"
+
+[vars]
+JWT_SECRET = "b3ad23cf-64b2-488b-9371-0cd4bd398156"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "test"
+database_id = "b3ad23cf-64b2-488b-9371-0cd4bd398156" # اترك هذا كما هو وعدّله لاحقاً
+
+
+
+
