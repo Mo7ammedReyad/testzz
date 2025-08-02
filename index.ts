@@ -1,30 +1,28 @@
 import { Hono } from 'hono'
-import { jwt } from 'hono/jwt'
+import { bcrypt } from 'bcryptjs'
 import { html } from 'hono/html'
-import { serveStatic } from 'hono/cloudflare-workers'
-import bcrypt from 'bcryptjs'
-import type { JwtVariables } from 'hono/jwt'
 
 type Bindings = {
   DB: D1Database
-  JWT_SECRET: string
 }
 
-type Variables = JwtVariables
+type User = {
+  id: number
+  email: string
+  password: string
+  created_at: string
+}
 
-const app = new Hono<{ Bindings: Bindings; Variables: Variables }>()
+const app = new Hono<{ Bindings: Bindings }>()
 
-// JWT Middleware for protected routes
-const authMiddleware = jwt({ secret: 'your-secret-key-here' })
-
-// HTML Template with inline CSS
-const getHtmlTemplate = (message?: string, error?: string) => html`
+// Inline HTML with modern design
+const getLoginPage = (error: string = '') => html`
 <!DOCTYPE html>
 <html lang="ar" dir="rtl">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>تسجيل الدخول والتسجيل</title>
+    <title>تسجيل الدخول</title>
     <style>
         * {
             margin: 0;
@@ -48,188 +46,209 @@ const getHtmlTemplate = (message?: string, error?: string) => html`
             box-shadow: 0 20px 40px rgba(0,0,0,0.1);
             overflow: hidden;
             width: 100%;
-            max-width: 800px;
-            display: flex;
-            min-height: 500px;
+            max-width: 400px;
         }
         
-        .form-section {
-            flex: 1;
-            padding: 40px;
-            display: flex;
-            flex-direction: column;
-            justify-content: center;
-        }
-        
-        .form-section:first-child {
-            background: #f8f9fa;
-            border-left: 1px solid #e9ecef;
-        }
-        
-        h2 {
-            color: #333;
-            margin-bottom: 30px;
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 30px;
             text-align: center;
-            font-size: 24px;
+        }
+        
+        .header h1 {
+            font-size: 28px;
+            margin-bottom: 10px;
+        }
+        
+        .tabs {
+            display: flex;
+            background: #f8f9fa;
+        }
+        
+        .tab {
+            flex: 1;
+            padding: 15px;
+            text-align: center;
+            cursor: pointer;
+            border: none;
+            background: none;
+            font-size: 16px;
+            transition: all 0.3s ease;
+        }
+        
+        .tab.active {
+            background: white;
+            color: #667eea;
+            border-bottom: 3px solid #667eea;
+        }
+        
+        .form-container {
+            padding: 30px;
+        }
+        
+        .form {
+            display: none;
+        }
+        
+        .form.active {
+            display: block;
         }
         
         .form-group {
             margin-bottom: 20px;
         }
         
-        label {
+        .form-group label {
             display: block;
             margin-bottom: 8px;
-            color: #555;
+            color: #333;
             font-weight: 500;
         }
         
-        input[type="email"],
-        input[type="password"] {
+        .form-group input {
             width: 100%;
-            padding: 12px 16px;
+            padding: 12px 15px;
             border: 2px solid #e1e5e9;
-            border-radius: 8px;
+            border-radius: 10px;
             font-size: 16px;
             transition: border-color 0.3s ease;
         }
         
-        input[type="email"]:focus,
-        input[type="password"]:focus {
+        .form-group input:focus {
             outline: none;
             border-color: #667eea;
         }
         
-        button {
+        .btn {
             width: 100%;
             padding: 12px;
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             color: white;
             border: none;
-            border-radius: 8px;
+            border-radius: 10px;
             font-size: 16px;
             font-weight: 600;
             cursor: pointer;
             transition: transform 0.2s ease;
         }
         
-        button:hover {
+        .btn:hover {
             transform: translateY(-2px);
         }
         
-        .message {
-            margin-top: 20px;
-            padding: 12px;
-            border-radius: 8px;
+        .error {
+            background: #fee;
+            color: #c33;
+            padding: 10px;
+            border-radius: 5px;
+            margin-bottom: 20px;
             text-align: center;
-            font-weight: 500;
         }
         
         .success {
-            background: #d4edda;
-            color: #155724;
-            border: 1px solid #c3e6cb;
-        }
-        
-        .error {
-            background: #f8d7da;
-            color: #721c24;
-            border: 1px solid #f5c6cb;
+            background: #efe;
+            color: #3c3;
+            padding: 10px;
+            border-radius: 5px;
+            margin-bottom: 20px;
+            text-align: center;
         }
         
         .welcome {
             text-align: center;
-            color: #333;
+            padding: 40px 30px;
         }
         
-        .welcome h1 {
+        .welcome h2 {
             color: #667eea;
-            margin-bottom: 20px;
+            margin-bottom: 10px;
         }
         
-        @media (max-width: 768px) {
-            .container {
-                flex-direction: column;
-                max-width: 400px;
-            }
-            
-            .form-section:first-child {
-                border-left: none;
-                border-bottom: 1px solid #e9ecef;
-            }
+        .logout-btn {
+            background: #dc3545;
+            margin-top: 20px;
+        }
+        
+        .logout-btn:hover {
+            background: #c82333;
         }
     </style>
 </head>
 <body>
     <div class="container">
-        <div class="form-section">
-            <h2>تسجيل مستخدم جديد</h2>
-            <form id="signupForm">
-                <div class="form-group">
-                    <label for="signupEmail">البريد الإلكتروني:</label>
-                    <input type="email" id="signupEmail" name="email" required>
-                </div>
-                <div class="form-group">
-                    <label for="signupPassword">كلمة المرور:</label>
-                    <input type="password" id="signupPassword" name="password" required minlength="6">
-                </div>
-                <button type="submit">إنشاء حساب</button>
-            </form>
+        <div class="header">
+            <h1>نظام المستخدمين</h1>
+            <p>مرحباً بك في منصتنا</p>
         </div>
         
-        <div class="form-section">
-            <h2>تسجيل الدخول</h2>
-            <form id="loginForm">
+        <div class="tabs">
+            <button class="tab active" onclick="showTab('login')">تسجيل الدخول</button>
+            <button class="tab" onclick="showTab('signup')">إنشاء حساب</button>
+        </div>
+        
+        <div class="form-container">
+            ${error ? `<div class="error">${error}</div>` : ''}
+            
+            <!-- Login Form -->
+            <form id="loginForm" class="form active" onsubmit="handleLogin(event)">
                 <div class="form-group">
-                    <label for="loginEmail">البريد الإلكتروني:</label>
-                    <input type="email" id="loginEmail" name="email" required>
+                    <label for="loginEmail">البريد الإلكتروني</label>
+                    <input type="email" id="loginEmail" required>
                 </div>
                 <div class="form-group">
-                    <label for="loginPassword">كلمة المرور:</label>
-                    <input type="password" id="loginPassword" name="password" required>
+                    <label for="loginPassword">كلمة المرور</label>
+                    <input type="password" id="loginPassword" required>
                 </div>
-                <button type="submit">دخول</button>
+                <button type="submit" class="btn">تسجيل الدخول</button>
+            </form>
+            
+            <!-- Signup Form -->
+            <form id="signupForm" class="form" onsubmit="handleSignup(event)">
+                <div class="form-group">
+                    <label for="signupEmail">البريد الإلكتروني</label>
+                    <input type="email" id="signupEmail" required>
+                </div>
+                <div class="form-group">
+                    <label for="signupPassword">كلمة المرور</label>
+                    <input type="password" id="signupPassword" required minlength="6">
+                </div>
+                <div class="form-group">
+                    <label for="confirmPassword">تأكيد كلمة المرور</label>
+                    <input type="password" id="confirmPassword" required minlength="6">
+                </div>
+                <button type="submit" class="btn">إنشاء حساب</button>
             </form>
         </div>
     </div>
 
-    ${message ? `<div class="message success">${message}</div>` : ''}
-    ${error ? `<div class="message error">${error}</div>` : ''}
-
     <script>
-        // Signup Form Handler
-        document.getElementById('signupForm').addEventListener('submit', async (e) => {
-            e.preventDefault();
-            const formData = new FormData(e.target);
-            const data = Object.fromEntries(formData);
+        function showTab(tabName) {
+            // Hide all forms
+            document.querySelectorAll('.form').forEach(form => {
+                form.classList.remove('active');
+            });
             
-            try {
-                const response = await fetch('/signup', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                    },
-                    body: JSON.stringify(data),
-                });
-                
-                const result = await response.json();
-                
-                if (response.ok) {
-                    alert('تم إنشاء الحساب بنجاح! يمكنك الآن تسجيل الدخول.');
-                    e.target.reset();
-                } else {
-                    alert(result.error || 'حدث خطأ في إنشاء الحساب');
-                }
-            } catch (error) {
-                alert('حدث خطأ في الاتصال بالخادم');
+            // Remove active class from all tabs
+            document.querySelectorAll('.tab').forEach(tab => {
+                tab.classList.remove('active');
+            });
+            
+            // Show selected form and activate tab
+            if (tabName === 'login') {
+                document.getElementById('loginForm').classList.add('active');
+                document.querySelectorAll('.tab')[0].classList.add('active');
+            } else {
+                document.getElementById('signupForm').classList.add('active');
+                document.querySelectorAll('.tab')[1].classList.add('active');
             }
-        });
-
-        // Login Form Handler
-        document.getElementById('loginForm').addEventListener('submit', async (e) => {
-            e.preventDefault();
-            const formData = new FormData(e.target);
-            const data = Object.fromEntries(formData);
+        }
+        
+        async function handleLogin(event) {
+            event.preventDefault();
+            
+            const email = document.getElementById('loginEmail').value;
+            const password = document.getElementById('loginPassword').value;
             
             try {
                 const response = await fetch('/login', {
@@ -237,81 +256,94 @@ const getHtmlTemplate = (message?: string, error?: string) => html`
                     headers: {
                         'Content-Type': 'application/json',
                     },
-                    body: JSON.stringify(data),
+                    body: JSON.stringify({ email, password })
                 });
                 
                 const result = await response.json();
                 
-                if (response.ok) {
-                    // Store token in localStorage
-                    localStorage.setItem('token', result.token);
-                    // Reload page to show welcome message
-                    window.location.reload();
+                if (result.success) {
+                    showWelcome(result.user.email);
                 } else {
-                    alert(result.error || 'البريد الإلكتروني أو كلمة المرور غير صحيحة');
+                    showError(result.message || 'فشل تسجيل الدخول');
                 }
             } catch (error) {
-                alert('حدث خطأ في الاتصال بالخادم');
+                showError('حدث خطأ في الاتصال');
             }
-        });
-
-        // Check if user is logged in
-        window.addEventListener('load', async () => {
-            const token = localStorage.getItem('token');
-            if (token) {
-                try {
-                    const response = await fetch('/', {
-                        headers: {
-                            'Authorization': `Bearer ${token}`,
-                        },
-                    });
-                    
-                    if (response.ok) {
-                        const result = await response.json();
-                        if (result.user) {
-                            document.body.innerHTML = \`
-                                <div class="welcome">
-                                    <h1>مرحباً بك!</h1>
-                                    <p>تم تسجيل دخولك بنجاح</p>
-                                    <p><strong>البريد الإلكتروني:</strong> ${result.user.email}</p>
-                                    <button onclick="localStorage.removeItem('token'); window.location.reload();">تسجيل الخروج</button>
-                                </div>
-                            \`;
-                        }
-                    }
-                } catch (error) {
-                    console.error('Error checking auth status:', error);
+        }
+        
+        async function handleSignup(event) {
+            event.preventDefault();
+            
+            const email = document.getElementById('signupEmail').value;
+            const password = document.getElementById('signupPassword').value;
+            const confirmPassword = document.getElementById('confirmPassword').value;
+            
+            if (password !== confirmPassword) {
+                showError('كلمات المرور غير متطابقة');
+                return;
+            }
+            
+            try {
+                const response = await fetch('/signup', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ email, password })
+                });
+                
+                const result = await response.json();
+                
+                if (result.success) {
+                    showWelcome(result.user.email);
+                } else {
+                    showError(result.message || 'فشل إنشاء الحساب');
                 }
+            } catch (error) {
+                showError('حدث خطأ في الاتصال');
             }
-        });
+        }
+        
+        function showWelcome(email) {
+            document.querySelector('.container').innerHTML = \`
+                <div class="welcome">
+                    <h2>مرحباً بك!</h2>
+                    <p>تم تسجيل دخولك بنجاح</p>
+                    <p><strong>\${email}</strong></p>
+                    <button class="btn logout-btn" onclick="logout()">تسجيل الخروج</button>
+                </div>
+            \`;
+        }
+        
+        function showError(message) {
+            const errorDiv = document.createElement('div');
+            errorDiv.className = 'error';
+            errorDiv.textContent = message;
+            
+            const container = document.querySelector('.form-container');
+            const existingError = container.querySelector('.error');
+            if (existingError) {
+                existingError.remove();
+            }
+            
+            container.insertBefore(errorDiv, container.firstChild);
+            
+            setTimeout(() => {
+                errorDiv.remove();
+            }, 5000);
+        }
+        
+        function logout() {
+            location.reload();
+        }
     </script>
 </body>
 </html>
 `
 
-// Root route - serve HTML
-app.get('/', async (c) => {
-  const authHeader = c.req.header('Authorization')
-  
-  if (authHeader && authHeader.startsWith('Bearer ')) {
-    const token = authHeader.substring(7)
-    try {
-      // Verify token and get user info
-      const payload = JSON.parse(atob(token.split('.')[1]))
-      
-      const { results } = await c.env.DB.prepare(
-        'SELECT id, email, created_at FROM users WHERE id = ?'
-      ).bind(payload.sub).all()
-      
-      if (results && results.length > 0) {
-        return c.json({ user: results[0] })
-      }
-    } catch (error) {
-      // Invalid token, continue to show login form
-    }
-  }
-  
-  return c.html(getHtmlTemplate())
+// Routes
+app.get('/', (c) => {
+  return c.html(getLoginPage())
 })
 
 // Signup route
@@ -320,38 +352,46 @@ app.post('/signup', async (c) => {
     const { email, password } = await c.req.json()
     
     if (!email || !password) {
-      return c.json({ error: 'البريد الإلكتروني وكلمة المرور مطلوبان' }, 400)
+      return c.json({ success: false, message: 'البريد الإلكتروني وكلمة المرور مطلوبان' }, 400)
     }
     
     if (password.length < 6) {
-      return c.json({ error: 'كلمة المرور يجب أن تكون 6 أحرف على الأقل' }, 400)
+      return c.json({ success: false, message: 'كلمة المرور يجب أن تكون 6 أحرف على الأقل' }, 400)
     }
     
     // Check if user already exists
-    const existingUser = await c.env.DB.prepare(
-      'SELECT id FROM users WHERE email = ?'
-    ).bind(email).first()
+    const existingUser = await c.env.DB.prepare('SELECT * FROM users WHERE email = ?')
+      .bind(email)
+      .first()
     
     if (existingUser) {
-      return c.json({ error: 'المستخدم موجود بالفعل' }, 400)
+      return c.json({ success: false, message: 'هذا البريد الإلكتروني مسجل بالفعل' }, 400)
     }
     
     // Hash password
     const hashedPassword = await bcrypt.hash(password, 10)
     
-    // Insert user
-    const result = await c.env.DB.prepare(
-      'INSERT INTO users (email, password, created_at) VALUES (?, ?, ?)'
-    ).bind(email, hashedPassword, new Date().toISOString()).run()
+    // Insert new user
+    const result = await c.env.DB.prepare('INSERT INTO users (email, password, created_at) VALUES (?, ?, ?)')
+      .bind(email, hashedPassword, new Date().toISOString())
+      .run()
     
     if (result.success) {
-      return c.json({ message: 'تم إنشاء الحساب بنجاح' })
+      const newUser = await c.env.DB.prepare('SELECT id, email, created_at FROM users WHERE email = ?')
+        .bind(email)
+        .first()
+      
+      return c.json({ 
+        success: true, 
+        message: 'تم إنشاء الحساب بنجاح',
+        user: newUser
+      })
     } else {
-      return c.json({ error: 'فشل في إنشاء الحساب' }, 500)
+      return c.json({ success: false, message: 'فشل إنشاء الحساب' }, 500)
     }
   } catch (error) {
     console.error('Signup error:', error)
-    return c.json({ error: 'حدث خطأ في الخادم' }, 500)
+    return c.json({ success: false, message: 'حدث خطأ في الخادم' }, 500)
   }
 })
 
@@ -361,66 +401,57 @@ app.post('/login', async (c) => {
     const { email, password } = await c.req.json()
     
     if (!email || !password) {
-      return c.json({ error: 'البريد الإلكتروني وكلمة المرور مطلوبان' }, 400)
+      return c.json({ success: false, message: 'البريد الإلكتروني وكلمة المرور مطلوبان' }, 400)
     }
     
     // Find user
-    const user = await c.env.DB.prepare(
-      'SELECT id, email, password FROM users WHERE email = ?'
-    ).bind(email).first()
+    const user = await c.env.DB.prepare('SELECT * FROM users WHERE email = ?')
+      .bind(email)
+      .first() as User | null
     
     if (!user) {
-      return c.json({ error: 'المستخدم غير موجود' }, 401)
+      return c.json({ success: false, message: 'البريد الإلكتروني أو كلمة المرور غير صحيحة' }, 401)
     }
     
     // Verify password
     const isValidPassword = await bcrypt.compare(password, user.password)
     
     if (!isValidPassword) {
-      return c.json({ error: 'كلمة المرور غير صحيحة' }, 401)
+      return c.json({ success: false, message: 'البريد الإلكتروني أو كلمة المرور غير صحيحة' }, 401)
     }
-    
-    // Create JWT token (simple implementation)
-    const header = { alg: 'HS256', typ: 'JWT' }
-    const payload = { 
-      sub: user.id, 
-      email: user.email, 
-      iat: Math.floor(Date.now() / 1000),
-      exp: Math.floor(Date.now() / 1000) + (24 * 60 * 60) // 24 hours
-    }
-    
-    const encodedHeader = btoa(JSON.stringify(header))
-    const encodedPayload = btoa(JSON.stringify(payload))
-    const signature = btoa('your-secret-key-here') // In production, use proper signing
-    
-    const token = `${encodedHeader}.${encodedPayload}.${signature}`
     
     return c.json({ 
+      success: true, 
       message: 'تم تسجيل الدخول بنجاح',
-      token,
-      user: { id: user.id, email: user.email }
+      user: {
+        id: user.id,
+        email: user.email,
+        created_at: user.created_at
+      }
     })
   } catch (error) {
     console.error('Login error:', error)
-    return c.json({ error: 'حدث خطأ في الخادم' }, 500)
+    return c.json({ success: false, message: 'حدث خطأ في الخادم' }, 500)
   }
 })
 
-// Protected route - Get all users (admin only)
-app.get('/users', authMiddleware, async (c) => {
+// Admin route to get all users
+app.get('/users', async (c) => {
   try {
-    const { results } = await c.env.DB.prepare(
-      'SELECT id, email, created_at FROM users ORDER BY created_at DESC'
-    ).all()
+    const users = await c.env.DB.prepare('SELECT id, email, created_at FROM users ORDER BY created_at DESC')
+      .all()
     
-    return c.json({ users: results })
+    return c.json({ 
+      success: true, 
+      users: users.results 
+    })
   } catch (error) {
     console.error('Get users error:', error)
-    return c.json({ error: 'حدث خطأ في الخادم' }, 500)
+    return c.json({ success: false, message: 'حدث خطأ في الخادم' }, 500)
   }
 })
 
-// Initialize database table
+// Initialize database table on first run
 app.get('/init-db', async (c) => {
   try {
     const result = await c.env.DB.exec(`
@@ -432,10 +463,13 @@ app.get('/init-db', async (c) => {
       )
     `)
     
-    return c.json({ message: 'Database initialized successfully' })
+    return c.json({ 
+      success: true, 
+      message: 'تم تهيئة قاعدة البيانات بنجاح' 
+    })
   } catch (error) {
     console.error('Database init error:', error)
-    return c.json({ error: 'Failed to initialize database' }, 500)
+    return c.json({ success: false, message: 'فشل تهيئة قاعدة البيانات' }, 500)
   }
 })
 

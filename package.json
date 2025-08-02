@@ -1,5 +1,5 @@
 {
-  "name": "hono-auth-worker",
+  "name": "cloudflare-auth-worker",
   "version": "1.0.0",
   "description": "Cloudflare Worker with Hono framework for user authentication",
   "main": "index.ts",
@@ -8,11 +8,11 @@
     "deploy": "wrangler deploy"
   },
   "dependencies": {
-    "hono": "^3.12.0",
+    "hono": "^4.0.0",
     "bcryptjs": "^2.4.3"
   },
   "devDependencies": {
-    "@types/bcryptjs": "^2.4.6",
+    "@cloudflare/workers-types": "^4.0.0",
     "wrangler": "^3.0.0",
     "typescript": "^5.0.0"
   }
